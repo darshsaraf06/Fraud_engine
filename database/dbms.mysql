@@ -11,8 +11,8 @@ CREATE TABLE users (
     overall_risk_score DECIMAL(10,2) DEFAULT 0
 ) ENGINE=InnoDB;
 
-
-
+INSERT INTO users (name, email, phone, overall_risk_score) VALUES('Barry', 'rahul@example.com', '9876543210', 10.00), ('Allen', 'ananya@example.com', '9123456780', 5.00);
+SELECT * FROM users;
 -- Accounts
 CREATE TABLE accounts (
     account_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -23,6 +23,8 @@ CREATE TABLE accounts (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+INSERT INTO accounts (user_id, account_type, status) VALUES (1, 'savings', 'active'), (2, 'current', 'active');
+SELECT * FROM accounts;
 
 -- DEVICES
 CREATE TABLE devices (
@@ -30,6 +32,9 @@ CREATE TABLE devices (
     device_type VARCHAR(50),
     first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+INSERT INTO devices (device_id, device_type) VALUES ('device_mobile_01', 'mobile'), ('device_laptop_01', 'laptop');
+SELECT * FROM devices;
 
 -- TRANSACTIONS
 CREATE TABLE transactions (
@@ -44,6 +49,9 @@ CREATE TABLE transactions (
     status VARCHAR(20) DEFAULT 'completed'
 );
 
+INSERT INTO transactions(account_id, device_id, amount, transaction_type, location, ip_address) VALUES (1, 'device_mobile_01', 15000.00, 'debit', 'Delhi', '192.168.1.10'), (2, 'device_laptop_01', 2500.00, 'credit', 'Mumbai', '192.168.1.20');
+SELECT * FROM transactions;
+
 -- FRAUD RULES
 CREATE TABLE fraud_rules (
     rule_id SERIAL PRIMARY KEY,
@@ -56,6 +64,9 @@ CREATE TABLE fraud_rules (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+INSERT INTO fraud_rules(rule_name, rule_description, threshold_value, time_window_minutes, severity_level, is_active) VALUES ('High Amount Spike', 'Triggers when transaction exceeds threshold amount', 10000, NULL, 'high', TRUE), ('Rapid Transaction Burst',  'Triggers when multiple transactions occur in short time window', 5, 10, 'medium', TRUE);
+SELECT * FROM fraud_rules;
+
 -- FRAUD ALERTS
 CREATE TABLE fraud_alerts (
     alert_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -65,6 +76,9 @@ CREATE TABLE fraud_alerts (
     severity VARCHAR(20),
     status VARCHAR(20) DEFAULT 'open'
 );
+
+INSERT INTO fraud_alerts(txn_id, rule_id, severity, status) VALUES (1, 1, 'high', 'open'), (2, 2, 'medium', 'open');
+SELECT * FROM fraud_alerts;
 
 -- Initial Fraud Rules
 INSERT INTO fraud_rules 
