@@ -6,8 +6,8 @@ app = Flask(__name__)
 def get_db_connection():
     return pymysql.connect(
         host="localhost",
-        user="appuser",
-        password="app123",
+        user="your_user",
+        password="your_password",
         database="fraud_engine",
         cursorclass=pymysql.cursors.DictCursor
     )
@@ -97,3 +97,4 @@ def add_transaction():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
