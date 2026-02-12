@@ -1,0 +1,197 @@
+CREATE DATABASE fraud_engine;
+use fraud_engine;
+
+-- USERS
+CREATE TABLE users (
+    user_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    phone VARCHAR(15),
+    account_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    overall_risk_score DECIMAL(10,2) DEFAULT 0
+) ENGINE=InnoDB;
+
+INSERT INTO users (name, email, phone, overall_risk_score) VALUES('Barry', 'barry@example.com', '9876543210', 10.00), ('Allen', 'allen@example.com', '9123456780', 5.00);
+SELECT * FROM users;
+
+-- Accounts
+CREATE TABLE accounts (
+    account_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED,
+    account_type VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+INSERT INTO accounts (user_id, account_type, status) VALUES (1, 'savings', 'active'), (2, 'current', 'active');
+SELECT * FROM accounts;
+
+-- DEVICES
+CREATE TABLE devices (
+    device_id VARCHAR(100) PRIMARY KEY,
+    device_type VARCHAR(50),
+    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO devices (device_id, device_type) VALUES ('device_mobile_01', 'mobile'), ('device_laptop_01', 'laptop');
+SELECT * FROM devices;
+
+-- TRANSACTIONS
+CREATE TABLE transactions (
+    txn_id SERIAL PRIMARY KEY,
+    account_id INT UNSIGNED REFERENCES accounts(account_id) ON DELETE CASCADE,
+    device_id VARCHAR(100) REFERENCES devices(device_id),
+    amount NUMERIC(12,2) NOT NULL,
+    transaction_type VARCHAR(20),
+    location VARCHAR(100),
+    ip_address VARCHAR(50),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'completed'
+);
+
+INSERT INTO transactions(account_id, device_id, amount, transaction_type, location, ip_address) VALUES (1, 'device_mobile_01', 15000.00, 'debit', 'Delhi', '192.168.1.10'), (2, 'device_laptop_01', 2500.00, 'credit', 'Mumbai', '192.168.1.20');
+SELECT * FROM transactions;
+
+-- FRAUD RULES
+CREATE TABLE fraud_rules (
+    rule_id SERIAL PRIMARY KEY,
+    rule_name VARCHAR(100),
+    rule_description TEXT,
+    threshold_value NUMERIC,
+    time_window_minutes INT,
+    severity_level VARCHAR(20),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO fraud_rules(rule_name, rule_description, threshold_value, time_window_minutes, severity_level, is_active) VALUES ('High Amount Spike', 'Triggers when transaction exceeds threshold amount', 10000, NULL, 'high', TRUE), ('Rapid Transaction Burst',  'Triggers when multiple transactions occur in short time window', 5, 10, 'medium', TRUE);
+SELECT * FROM fraud_rules;
+
+-- FRAUD ALERTS
+CREATE TABLE fraud_alerts (
+    alert_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    txn_id INT UNSIGNED,
+    rule_id INT UNSIGNED,
+    alert_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    severity VARCHAR(20),
+    status VARCHAR(20) DEFAULT 'open'
+);
+
+INSERT INTO fraud_alerts(txn_id, rule_id, severity, status) VALUES (1, 1, 'high', 'open'), (2, 2, 'medium', 'open');
+SELECT * FROM fraud_alerts;
+
+-- Initial Fraud Rules
+INSERT INTO fraud_rules 
+(rule_name, rule_description, threshold_value, time_window_minutes, severity_level)
+VALUES
+('Rapid Transaction Burst',
+ 'More than N transactions within time window',
+ 5, 10, 'high'),
+
+('High Amount Spike',
+ 'Transaction amount greater than threshold',
+ 10000, NULL, 'medium'),
+
+('Device Hopping',
+ 'Multiple devices used within time window',
+ 3, 15, 'high');
+
+-- Trigger Implementation
+DELIMITER $$
+
+CREATE TRIGGER detect_fraud_after_insert
+AFTER INSERT ON transactions
+FOR EACH ROW
+BEGIN
+
+    DECLARE txn_count INT;
+    DECLARE device_count INT;
+    DECLARE burst_threshold INT;
+    DECLARE burst_window INT;
+    DECLARE device_threshold INT;
+    DECLARE device_window INT;
+    DECLARE amount_threshold DECIMAL(12,2);
+
+    -- Get rule values dynamically
+    SELECT threshold_value, time_window_minutes
+    INTO burst_threshold, burst_window
+    FROM fraud_rules
+    WHERE rule_name = 'Rapid Transaction Burst' AND is_active = TRUE
+    LIMIT 1;
+
+    SELECT threshold_value
+    INTO amount_threshold
+    FROM fraud_rules
+    WHERE rule_name = 'High Amount Spike' AND is_active = TRUE
+    LIMIT 1;
+
+    SELECT threshold_value, time_window_minutes
+    INTO device_threshold, device_window
+    FROM fraud_rules
+    WHERE rule_name = 'Device Hopping' AND is_active = TRUE
+    LIMIT 1;
+
+    -- 1️⃣ Rapid Transaction Burst
+    SELECT COUNT(*)
+    INTO txn_count
+    FROM transactions
+    WHERE account_id = NEW.account_id
+      AND timestamp >= NOW() - INTERVAL burst_window MINUTE;
+
+    IF txn_count > burst_threshold THEN
+        INSERT INTO fraud_alerts (txn_id, rule_id, severity)
+        SELECT NEW.txn_id, rule_id, severity_level
+        FROM fraud_rules
+        WHERE rule_name = 'Rapid Transaction Burst'
+        LIMIT 1;
+    END IF;
+
+    -- 2️⃣ High Amount Spike
+    IF NEW.amount > amount_threshold THEN
+        INSERT INTO fraud_alerts (txn_id, rule_id, severity)
+        SELECT NEW.txn_id, rule_id, severity_level
+        FROM fraud_rules
+        WHERE rule_name = 'High Amount Spike'
+        LIMIT 1;
+    END IF;
+
+    -- 3️⃣ Device Hopping
+    SELECT COUNT(DISTINCT device_id)
+    INTO device_count
+    FROM transactions
+    WHERE account_id = NEW.account_id
+      AND timestamp >= NOW() - INTERVAL device_window MINUTE;
+
+    IF device_count > device_threshold THEN
+        INSERT INTO fraud_alerts (txn_id, rule_id, severity)
+        SELECT NEW.txn_id, rule_id, severity_level
+        FROM fraud_rules
+        WHERE rule_name = 'Device Hopping'
+        LIMIT 1;
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+-- TESTING
+INSERT INTO users (name, email) VALUES ('Test User', 'test@mail.com');
+
+INSERT INTO accounts (user_id, account_type)
+VALUES (1, 'savings');
+
+INSERT INTO devices (device_id, device_type)
+VALUES ('device_1', 'mobile'),
+       ('device_2', 'laptop'),
+       ('device_3', 'tablet'),
+       ('device_4', 'mobile');
+
+INSERT INTO transactions (account_id, device_id, amount)
+VALUES (1, 'device_1', 200),
+       (1, 'device_1', 300),
+       (1, 'device_2', 150),
+       (1, 'device_3', 120),
+       (1, 'device_4', 100);
+
+SELECT * FROM fraud_alerts;

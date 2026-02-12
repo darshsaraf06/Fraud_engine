@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<h3>Users</h3>
+<table>
+<tr>
+    <th>ID</th>
+    <th>Name</th>
+    <th>Email</th>
+    <th>Risk Score</th>
+</tr>
+{% for user in users %}
+<tr>
+    <td>{{ user.user_id }}</td>
+    <td>{{ user.name }}</td>
+    <td>{{ user.email }}</td>
+    <td>{{ user.overall_risk_score }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<h3>Fraud Alerts</h3>
+<table>
+<tr>
+    <th>Alert ID</th>
+    <th>Transaction ID</th>
+    <th>Rule ID</th>
+    <th>Severity</th>
+    <th>Status</th>
+</tr>
+{% for alert in alerts %}
+<tr>
+    <td>{{ alert.alert_id }}</td>
+    <td>{{ alert.txn_id }}</td>
+    <td>{{ alert.rule_id }}</td>
+    <td>{{ alert.severity }}</td>
+    <td>{{ alert.status }}</td>
+</tr>
+{% endfor %}
+</table>
+
+{% endblock %}
