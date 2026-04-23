@@ -1,42 +1,224 @@
 {% extends "layout.html" %}
+
 {% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Overview</p>
+        <h1>Fraud monitoring dashboard</h1>
+        <p class="muted">Large-scale transaction monitoring with SQL-triggered alerts, explainability, and scenario demos.</p>
+    </div>
+    <div class="header-actions">
+        <a class="btn btn-secondary" href="{{ url_for('transactions') }}">Review Transactions</a>
+        <a class="btn" href="{{ url_for('alerts') }}">Open Alerts</a>
+    </div>
+</section>
 
-<h3>Users</h3>
-<table>
-<tr>
-    <th>ID</th>
-    <th>Name</th>
-    <th>Email</th>
-    <th>Risk Score</th>
-</tr>
-{% for user in users %}
-<tr>
-    <td>{{ user.user_id }}</td>
-    <td>{{ user.name }}</td>
-    <td>{{ user.email }}</td>
-    <td>{{ user.overall_risk_score }}</td>
-</tr>
-{% endfor %}
-</table>
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">Total Users</span>
+        <strong id="total-users">{{ summary.total_users or 0 }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Total Transactions</span>
+        <strong id="total-transactions">{{ summary.total_transactions or 0 }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Fraud Alerts</span>
+        <strong id="total-alerts">{{ summary.total_alerts or 0 }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">High Risk Users</span>
+        <strong>{{ summary.high_risk_users or 0 }}</strong>
+    </article>
+</section>
 
-<h3>Fraud Alerts</h3>
-<table>
-<tr>
-    <th>Alert ID</th>
-    <th>Transaction ID</th>
-    <th>Rule ID</th>
-    <th>Severity</th>
-    <th>Status</th>
-</tr>
-{% for alert in alerts %}
-<tr>
-    <td>{{ alert.alert_id }}</td>
-    <td>{{ alert.txn_id }}</td>
-    <td>{{ alert.rule_id }}</td>
-    <td>{{ alert.severity }}</td>
-    <td>{{ alert.status }}</td>
-</tr>
-{% endfor %}
-</table>
+<section class="scenario-grid">
+    {% for scenario in scenarios %}
+    {% if scenario.alert %}
+    <article class="scenario-card">
+        <p class="eyebrow">{{ scenario.label }}</p>
+        <h3>{{ scenario.title }}</h3>
+        <p><strong>{{ scenario.alert.user_name }}</strong> · Alert #{{ scenario.alert.alert_id }}</p>
+        <p class="muted">{{ scenario.alert.explanation }}</p>
+        <div class="scenario-meta">
+            <span class="badge severity-{{ scenario.alert.severity|lower }}">{{ scenario.alert.rule_name }}</span>
+            <span class="badge badge-neutral">₹ {{ "%.2f"|format(scenario.alert.amount) }}</span>
+        </div>
+    </article>
+    {% endif %}
+    {% endfor %}
+</section>
 
+<section class="panel-grid">
+    <article class="card">
+        <div class="card-header">
+            <div>
+                <h2>High Risk Users</h2>
+                <p class="muted">Top users by SQL-maintained risk score.</p>
+            </div>
+            <a class="text-link" href="{{ url_for('users') }}">View users</a>
+        </div>
+        <div class="mini-table">
+            {% for user in risky_users %}
+            <div class="mini-row {% if user.overall_risk_score >= 70 %}row-high-risk{% endif %}">
+                <div>
+                    <strong>{{ user.name }}</strong>
+                    <div class="muted">{{ user.email }}</div>
+                </div>
+                <div class="mini-value">
+                    <span class="badge {% if user.overall_risk_score >= 70 %}severity-high{% elif user.overall_risk_score >= 40 %}severity-medium{% else %}badge-neutral{% endif %}">
+                        {{ "%.2f"|format(user.overall_risk_score) }}
+                    </span>
+                    <span class="muted">{{ user.alert_count }} alerts</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No users available.</div>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="card-header">
+            <div>
+                <h2>Top Fraud Rules Triggered</h2>
+                <p class="muted">Most active SQL fraud rules in the dataset.</p>
+            </div>
+        </div>
+        <div class="mini-table">
+            {% for rule in rules %}
+            <div class="mini-row">
+                <div>
+                    <strong>{{ rule.rule_name }}</strong>
+                    <div class="muted">{{ rule.severity_level|title }} severity</div>
+                </div>
+                <div class="mini-value">
+                    <span class="badge severity-{{ rule.severity_level|lower }}">{{ rule.trigger_count }}</span>
+                    <span class="muted">{{ rule.last_triggered_at or 'No alerts yet' }}</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-state">No rules triggered yet.</div>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+
+<section class="panel-grid">
+    <article class="card">
+        <div class="card-header">
+            <div>
+                <h2>Recent Suspicious Transactions</h2>
+                <p class="muted">Only transactions with SQL-generated alerts are shown here.</p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="styled-table compact">
+                <thead>
+                    <tr>
+                        <th>Txn</th>
+                        <th>User</th>
+                        <th>Amount</th>
+                        <th>Rules</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-alerts-body">
+                    {% for txn in suspicious_transactions %}
+                    <tr class="row-suspicious">
+                        <td>#{{ txn.txn_id }}</td>
+                        <td>
+                            <strong>{{ txn.user_name }}</strong><br>
+                            <span class="muted">{{ txn.user_email }}</span>
+                        </td>
+                        <td>₹ {{ "%.2f"|format(txn.amount) }}</td>
+                        <td>{{ txn.rules_triggered }}</td>
+                        <td>{{ txn.latest_alert_timestamp }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="empty-state">No suspicious transactions yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+
+    <article class="card">
+        <div class="card-header">
+            <div>
+                <h2>Recent Fraud Alerts</h2>
+                <p class="muted">Alert explanations show exactly what threshold was crossed.</p>
+            </div>
+            <a class="text-link" href="{{ url_for('alerts') }}">All alerts</a>
+        </div>
+        <div class="table-wrap">
+            <table class="styled-table compact">
+                <thead>
+                    <tr>
+                        <th>Alert</th>
+                        <th>Rule</th>
+                        <th>Severity</th>
+                        <th>Why triggered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in recent_alerts %}
+                    <tr>
+                        <td>#{{ alert.alert_id }}<br><span class="muted">{{ alert.user_name }}</span></td>
+                        <td>{{ alert.rule_name }}</td>
+                        <td><span class="badge severity-{{ alert.severity|lower }}">{{ alert.severity|title }}</span></td>
+                        <td class="explain-cell">{{ alert.explanation }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="empty-state">No alerts yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function refreshSummary() {
+    const response = await fetch("{{ url_for('api_summary') }}");
+    const data = await response.json();
+    document.getElementById("total-users").textContent = data.total_users ?? 0;
+    document.getElementById("total-transactions").textContent = data.total_transactions ?? 0;
+    document.getElementById("total-alerts").textContent = data.total_alerts ?? 0;
+}
+
+async function refreshRecentAlerts() {
+    const response = await fetch("{{ url_for('api_recent_alerts') }}");
+    const data = await response.json();
+    const body = document.getElementById("recent-alerts-body");
+
+    if (!data.alerts || data.alerts.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" class="empty-state">No suspicious transactions yet.</td></tr>';
+        return;
+    }
+
+    body.innerHTML = data.alerts.map((txn) => `
+        <tr class="row-suspicious">
+            <td>#${txn.txn_id}</td>
+            <td><strong>${txn.user_name}</strong><br><span class="muted">${txn.user_email ?? ""}</span></td>
+            <td>₹ ${Number(txn.amount).toFixed(2)}</td>
+            <td>${txn.rules_triggered}</td>
+            <td>${txn.latest_alert_timestamp}</td>
+        </tr>
+    `).join("");
+}
+
+refreshSummary();
+refreshRecentAlerts();
+setInterval(() => {
+    refreshSummary();
+    refreshRecentAlerts();
+}, 30000);
+</script>
 {% endblock %}
