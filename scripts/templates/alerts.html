@@ -1,0 +1,148 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Monitoring</p>
+        <h1>Fraud alerts</h1>
+        <p class="muted">Filters, explanations, and status toggles keep the fraud story readable for evaluators.</p>
+    </div>
+    <span class="pill">Auto-refresh enabled</span>
+</section>
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">Visible Alerts</span>
+        <strong>{{ alerts|length }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Filter Severity</span>
+        <strong>{{ severity_filter|title }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Filter Status</span>
+        <strong>{{ status_filter|title }}</strong>
+    </article>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2>Alert stream</h2>
+            <p class="muted">Each alert includes the human-readable reason and the threshold that was crossed.</p>
+        </div>
+        <form class="filter-bar filter-bar-wide" method="get" action="{{ url_for('alerts') }}">
+            <select name="severity">
+                <option value="all" {% if severity_filter == 'all' %}selected{% endif %}>All severities</option>
+                <option value="high" {% if severity_filter == 'high' %}selected{% endif %}>High</option>
+                <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Low</option>
+            </select>
+            <select name="status">
+                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All statuses</option>
+                <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open</option>
+                <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+            <button type="submit" class="btn btn-secondary">Apply</button>
+        </form>
+    </div>
+
+    <div class="table-wrap">
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th>Alert ID</th>
+                    <th>User</th>
+                    <th>Rule</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Txn</th>
+                    <th>Amount</th>
+                    <th>Threshold Crossed</th>
+                    <th>Why triggered</th>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="alerts-body">
+                {% for alert in alerts %}
+                <tr>
+                    <td>#{{ alert.alert_id }}</td>
+                    <td>
+                        <strong>{{ alert.user_name }}</strong><br>
+                        <span class="muted">{{ alert.user_email }}</span>
+                    </td>
+                    <td>{{ alert.rule_name }}</td>
+                    <td><span class="badge severity-{{ alert.severity|lower }}">{{ alert.severity|title }}</span></td>
+                    <td><span class="badge {% if alert.status == 'resolved' %}badge-neutral{% else %}severity-high{% endif %}">{{ alert.status|title }}</span></td>
+                    <td>#{{ alert.txn_id }}</td>
+                    <td>₹ {{ "%.2f"|format(alert.amount) }}</td>
+                    <td class="explain-cell">{{ alert.threshold_summary }}</td>
+                    <td class="explain-cell">{{ alert.explanation }}</td>
+                    <td>{{ alert.alert_timestamp }}</td>
+                    <td>
+                        <form method="post" action="{{ url_for('toggle_alert_status', alert_id=alert.alert_id) }}">
+                            <input type="hidden" name="severity" value="{{ severity_filter }}">
+                            <input type="hidden" name="status" value="{{ status_filter }}">
+                            {% if alert.status == 'open' %}
+                            <button type="submit" class="link-button">Resolve</button>
+                            {% else %}
+                            <button type="submit" class="link-button">Reopen</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="11" class="empty-state">No alerts match the selected filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function refreshAlerts() {
+    const url = new URL("{{ url_for('api_alerts') }}", window.location.origin);
+    url.searchParams.set("severity", "{{ severity_filter }}");
+    url.searchParams.set("status", "{{ status_filter }}");
+
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    const body = document.getElementById("alerts-body");
+
+    if (!data.alerts || data.alerts.length === 0) {
+        body.innerHTML = '<tr><td colspan="11" class="empty-state">No alerts match the selected filters.</td></tr>';
+        return;
+    }
+
+    body.innerHTML = data.alerts.map((alert) => `
+        <tr>
+            <td>#${alert.alert_id}</td>
+            <td><strong>${alert.user_name}</strong><br><span class="muted">${alert.user_email ?? ""}</span></td>
+            <td>${alert.rule_name}</td>
+            <td><span class="badge severity-${String(alert.severity).toLowerCase()}">${String(alert.severity).charAt(0).toUpperCase() + String(alert.severity).slice(1)}</span></td>
+            <td><span class="badge ${alert.status === 'resolved' ? 'badge-neutral' : 'severity-high'}">${String(alert.status).charAt(0).toUpperCase() + String(alert.status).slice(1)}</span></td>
+            <td>#${alert.txn_id}</td>
+            <td>₹ ${Number(alert.amount).toFixed(2)}</td>
+            <td class="explain-cell">${alert.threshold_summary}</td>
+            <td class="explain-cell">${alert.explanation}</td>
+            <td>${alert.alert_timestamp}</td>
+            <td>
+                <form method="post" action="/alerts/${alert.alert_id}/toggle-status">
+                    <input type="hidden" name="severity" value="{{ severity_filter }}">
+                    <input type="hidden" name="status" value="{{ status_filter }}">
+                    <button type="submit" class="link-button">${alert.status === 'open' ? 'Resolve' : 'Reopen'}</button>
+                </form>
+            </td>
+        </tr>
+    `).join("");
+}
+
+refreshAlerts();
+setInterval(refreshAlerts, 15000);
+</script>
+{% endblock %}

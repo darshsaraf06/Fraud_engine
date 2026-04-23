@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Risk view</p>
+        <h1>Users and risk scores</h1>
+        <p class="muted">Sort by risk score, then inspect the top ten highest-risk profiles from the larger dataset.</p>
+    </div>
+    <form class="filter-bar" method="get" action="{{ url_for('users') }}">
+        <select name="sort" onchange="this.form.submit()">
+            <option value="desc" {% if sort_mode == 'desc' %}selected{% endif %}>Risk high to low</option>
+            <option value="asc" {% if sort_mode == 'asc' %}selected{% endif %}>Risk low to high</option>
+        </select>
+    </form>
+</section>
+
+<section class="stats-grid">
+    <article class="stat-card">
+        <span class="stat-label">Total Users</span>
+        <strong>{{ users|length }}</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Top Risk Highlighted</span>
+        <strong>10</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">High Risk Threshold</span>
+        <strong>70+</strong>
+    </article>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2>User risk table</h2>
+            <p class="muted">Top 10 risky users are highlighted for rapid investigation.</p>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Accounts</th>
+                    <th>Transactions</th>
+                    <th>Alerts</th>
+                    <th>Risk Score</th>
+                    <th>Account Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr class="{% if user.user_id in top_risk_ids %}row-top-risk{% elif user.overall_risk_score >= 70 %}row-high-risk{% elif user.overall_risk_score >= 40 %}row-medium-risk{% endif %}">
+                    <td>
+                        <strong>{{ user.name }}</strong>
+                        {% if user.user_id in top_risk_ids %}
+                        <div class="muted">Top 10 risk profile</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.phone or '-' }}</td>
+                    <td>{{ user.account_count }}</td>
+                    <td>{{ user.transaction_count }}</td>
+                    <td>{{ user.alert_count }}</td>
+                    <td>
+                        {% if user.overall_risk_score >= 70 %}
+                            <span class="badge severity-high">{{ "%.2f"|format(user.overall_risk_score) }}</span>
+                        {% elif user.overall_risk_score >= 40 %}
+                            <span class="badge severity-medium">{{ "%.2f"|format(user.overall_risk_score) }}</span>
+                        {% else %}
+                            <span class="badge badge-neutral">{{ "%.2f"|format(user.overall_risk_score) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.account_created_at }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="empty-state">No users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
