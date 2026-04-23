@@ -1,18 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Fraud Detection Engine</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title or "Fraud Detection Engine" }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <div class="navbar">
-        <h2>Fraud Detection Engine</h2>
-        <a href="/">Dashboard</a>
-        <a href="/transactions">Transactions</a>
-    </div>
+    <header class="navbar">
+        <div class="brand">
+            <span class="brand-mark">FDE</span>
+            <div>
+                <div class="brand-title">Fraud Detection Engine</div>
+                <div class="brand-subtitle">SQL-first monitoring dashboard</div>
+            </div>
+        </div>
 
-    <div class="container">
+        <nav class="nav-links">
+            <a class="{{ 'active' if active_page == 'dashboard' else '' }}" href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a class="{{ 'active' if active_page == 'transactions' else '' }}" href="{{ url_for('transactions') }}">Transactions</a>
+            <a class="{{ 'active' if active_page == 'alerts' else '' }}" href="{{ url_for('alerts') }}">Alerts</a>
+            <a class="{{ 'active' if active_page == 'users' else '' }}" href="{{ url_for('users') }}">Users</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
         {% block content %}{% endblock %}
-    </div>
+    </main>
+
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
